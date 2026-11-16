@@ -12,8 +12,6 @@ less than baselines when trained on one dataset and tested zero-shot on others?
 
 ## Setup (Windows, Git Bash)
 
-## Setup (Windows, Git Bash)
-
 Requires [uv](https://docs.astral.sh/uv/). Python is managed by uv.
 
 ```bash
