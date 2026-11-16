@@ -1,0 +1,11 @@
+# Base configuration. Experiment configs override this (added in later phases).
+project:
+  name: nids-graph-rl
+  seed: 42
+  device: auto          # auto | cpu | cuda
+  deterministic: true
+
+paths:
+  data_raw: data/raw
+  data_processed: data/processed
+  runs: experiments/runs
