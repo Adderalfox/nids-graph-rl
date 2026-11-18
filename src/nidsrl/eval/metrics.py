@@ -101,6 +101,18 @@ def ranking_report(
     return out
 
 
+def threshold_at_fpr(y_true: np.ndarray, y_score: np.ndarray, fpr: float = 0.01) -> float:
+    """Score threshold such that about `fpr` of benign rows score above it.
+
+    Predict attack when score > threshold. Intended for source validation data only.
+    """
+    y_true = np.asarray(y_true).astype(bool)
+    benign = np.asarray(y_score, dtype=np.float64)[~y_true]
+    if benign.size == 0:
+        raise ValueError("Need benign rows to choose a threshold")
+    return float(np.quantile(benign, 1.0 - fpr))
+
+
 def group_report(
     y_pred: np.ndarray,
     group: np.ndarray,

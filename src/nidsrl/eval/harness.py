@@ -32,8 +32,13 @@ def evaluate_pair(
     *,
     min_group_flows: int = 500,
     batch_rows: int = 262_144,
+    row_stride: int = 1,
 ) -> dict[str, Any]:
-    """Evaluate `predict` on one protocol pair (see data/protocol.json)."""
+    """Evaluate `predict` on one protocol pair (see data/protocol.json).
+
+    row_stride > 1 evaluates every k-th row of each block (deterministic thinning for
+    quick development runs; use 1 for reported numbers).
+    """
     root = Path(root)
     scaler = load_scaler(root / "scalers" / f"{pair['source']}.json")
     plan = load_plan(root / "splits" / f"{pair['target']}.json")
@@ -42,7 +47,8 @@ def evaluate_pair(
     have_scores = True
     predict_seconds = 0.0
     for block in iter_split(root / pair["target"], plan, pair["eval_set"], scaler):
-        X = block["X"]
+        sl = slice(None, None, row_stride)
+        X = block["X"][sl]
         for start in range(0, len(X), batch_rows):
             chunk = X[start : start + batch_rows]
             t0 = time.perf_counter()
@@ -53,8 +59,8 @@ def evaluate_pair(
                 have_scores = False
             else:
                 scores.append(np.asarray(y_score, dtype=np.float32))
-        ys.append(block["y"])
-        groups.append(block["group"])
+        ys.append(block["y"][sl])
+        groups.append(block["group"][sl])
 
     y_true = np.concatenate(ys)
     n = len(y_true)

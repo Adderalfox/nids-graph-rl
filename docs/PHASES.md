@@ -9,8 +9,9 @@
 | 1a | Download NF3 datasets and run the schema audit | audit JSON for each dataset | done |
 | 1b | Clean, sort, host ids, identity-free features (Parquet) | prepared datasets + tests | done |
 | 1c | Stratified purged splits, train-only scaler, cross-dataset protocol | split files + leakage tests | done |
-| 1d | Metrics module, split loader and evaluation harness | metrics + harness tests | code delivered, awaiting run |
-| 2 | Environment (true MDP) and baselines (RF/XGB/MLP, MLP+DQN) | baseline table incl. cross-dataset matrix | not started |
+| 1d | Metrics module, split loader and evaluation harness | metrics + harness tests | done |
+| 2a | Supervised baselines (logreg, RF, HistGB) + results matrix | baseline transfer table | code delivered, awaiting runs |
+| 2b | Environment (true MDP) and MLP+DQN baseline | experiment A numbers | blocked on per-flow vs per-host-window decision |
 | 3 | Windowed host/flow graph builder and encoder | graph encoder vs MLP, transfer gap | not started |
 | 4 | Dueling Double DQN on graph embeddings, PER baseline | B vs A over 5 seeds | not started |
 | 5 | Topology-aware NSGA-II replay | C vs B, replay overhead | not started |
@@ -37,6 +38,9 @@
   FPR 1% and 0.1%, PR-AUC with prevalence; per-group recall (shared) and detection
   rate (unseen) for groups with at least 500 flows; inference throughput. Models
   plug into the harness as predict(X) -> (y_pred, y_score).
+- Baselines (docs/baselines.md): fit on a category-capped train sample (150k per
+  category), decision threshold chosen on a source-val sample at 1% FPR, evaluated
+  on every protocol pair; 5 seeds for reported numbers.
 - Compute budget: 16 GB RAM, 4 GB RTX 3050 Ti, about 47 GB free disk. Data is
   processed in streaming chunks; whole windows (never single flows) are sampled.
 - Stack: temporal graph encoder + Dueling Double DQN + topology-aware
@@ -62,7 +66,8 @@
 > Split results (real data): every source split has every attack group; ~65/9/18
 > train/val/test, ~7% purged; CIC web has only 89 flows in val; UNSW is data-poor
 > for dos/malware (expect weakest transfer from unsw; ton->cic best).
-> Phases: 0, 1a, 1b, 1c done; 1d metrics+loader+harness (code delivered), 2 env+baselines,
+> Phases: 0, 1 (a-d) done; 2a supervised baselines (code delivered, user runs them),
+> 2b env+MLP+DQN (needs decision: per-flow vs per-host-window actions),
 > 3 graph encoder, 4 RL agent+PER, 5 topology-aware replay, 6 ablations, 7 paper.
-> Current phase: 1d (awaiting pytest confirmation). Next: Phase 2.
+> Current phase: 2a (awaiting baseline runs/results matrix).
 > Resume from Phase ___.
