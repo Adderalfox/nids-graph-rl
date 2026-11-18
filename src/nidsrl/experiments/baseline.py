@@ -20,7 +20,17 @@ from nidsrl.data.splits import load_plan
 from nidsrl.eval.harness import evaluate_pair
 from nidsrl.eval.metrics import evaluate_arrays, threshold_at_fpr
 from nidsrl.models.baselines import make_baseline
+from nidsrl.models.features import kept_feature_indices
 from nidsrl.utils.seed import seed_everything
+
+
+def ablation_label(drop_groups: tuple[str, ...], keep_groups: tuple[str, ...]) -> str:
+    parts = []
+    if keep_groups:
+        parts.append("only_" + "+".join(keep_groups))
+    if drop_groups:
+        parts.append("no_" + "+".join(drop_groups))
+    return "_".join(parts)
 
 
 def run_baseline(
@@ -35,11 +45,14 @@ def run_baseline(
     row_stride: int = 1,
     targets: list[str] | None = None,
     min_group_flows: int = 500,
+    drop_groups: tuple[str, ...] = (),
+    keep_groups: tuple[str, ...] = (),
     log: Callable[[str], None] = print,
 ) -> dict[str, Any]:
     """Train and evaluate one baseline; returns a JSON-friendly results dict."""
     root = Path(root)
     seed_everything(seed)
+    keep = kept_feature_indices(drop_groups, keep_groups)
     protocol = json.loads((root / "protocol.json").read_text(encoding="utf-8"))
     pairs = [
         p
@@ -58,9 +71,9 @@ def run_baseline(
     log(f"  train rows={len(train['y']):,} val rows={len(val['y']):,}")
 
     est = make_baseline(model, seed)
-    est.fit(train["X"], train["y"])
+    est.fit(train["X"][:, keep], train["y"])
 
-    val_score = est.predict_proba(val["X"])[:, 1]
+    val_score = est.predict_proba(val["X"][:, keep])[:, 1]
     threshold = threshold_at_fpr(val["y"], val_score, fpr_target)
     val_report = evaluate_arrays(
         val["y"], (val_score > threshold).astype(np.uint8), val["group"], y_score=val_score
@@ -68,7 +81,7 @@ def run_baseline(
     log(f"  threshold={threshold:.6f} (source-val FPR target {fpr_target})")
 
     def predict(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        score = est.predict_proba(x)[:, 1]
+        score = est.predict_proba(x[:, keep])[:, 1]
         return (score > threshold).astype(np.uint8), score
 
     results = []
@@ -83,6 +96,10 @@ def run_baseline(
         "meta": {
             "kind": "baseline",
             "model": model,
+            "variant": ablation_label(drop_groups, keep_groups),
+            "drop_groups": list(drop_groups),
+            "keep_groups": list(keep_groups),
+            "n_features": len(keep),
             "source": source,
             "seed": seed,
             "train_cap": train_cap,

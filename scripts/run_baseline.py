@@ -15,8 +15,9 @@ import json
 from pathlib import Path
 
 from nidsrl.config import load_config
-from nidsrl.experiments.baseline import run_baseline
+from nidsrl.experiments.baseline import ablation_label, run_baseline
 from nidsrl.models.baselines import BASELINES
+from nidsrl.models.features import FEATURE_GROUPS
 from nidsrl.utils.runs import create_run_dir
 
 
@@ -29,6 +30,20 @@ def main() -> int:
     parser.add_argument("--val-cap", type=int, default=50_000)
     parser.add_argument("--fpr-target", type=float, default=0.01)
     parser.add_argument("--row-stride", type=int, default=1)
+    parser.add_argument(
+        "--keep-groups",
+        nargs="*",
+        default=[],
+        choices=sorted(FEATURE_GROUPS),
+        help="ablation: use ONLY these feature groups",
+    )
+    parser.add_argument(
+        "--drop-groups",
+        nargs="*",
+        default=[],
+        choices=sorted(FEATURE_GROUPS),
+        help="ablation: drop whole feature groups (see nidsrl.models.features)",
+    )
     args = parser.parse_args()
 
     for model in args.models:
@@ -45,8 +60,12 @@ def main() -> int:
                     val_cap=args.val_cap,
                     fpr_target=args.fpr_target,
                     row_stride=args.row_stride,
+                    drop_groups=tuple(args.drop_groups),
+                    keep_groups=tuple(args.keep_groups),
                 )
-                run_dir = create_run_dir(cfg, tag=f"baseline-{model}-{source}")
+                variant_name = ablation_label(tuple(args.drop_groups), tuple(args.keep_groups))
+                variant = ("-" + variant_name) if variant_name else ""
+                run_dir = create_run_dir(cfg, tag=f"baseline-{model}{variant}-{source}")
                 (run_dir / "results.json").write_text(
                     json.dumps(result, indent=2), encoding="utf-8"
                 )

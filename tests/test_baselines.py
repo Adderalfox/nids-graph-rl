@@ -81,3 +81,64 @@ def test_report_aggregates_over_seeds(world, tmp_path):
     md = matrix_markdown(summary, "logreg", "roc_auc")
     assert "| a |" in md and "±" in md
     assert collect_results(runs, kind="rl").empty
+
+
+def test_feature_group_ablation_is_recorded_and_runs(world):
+    root, _, _ = world
+    res = run_baseline(
+        root,
+        "a",
+        "logreg",
+        0,
+        train_cap=300,
+        val_cap=100,
+        min_group_flows=50,
+        drop_groups=("host_fingerprint", "retrans"),
+        targets=["a"],
+        log=lambda _: None,
+    )
+    assert res["meta"]["n_features"] == 47
+    assert res["meta"]["variant"] == "no_host_fingerprint+retrans"
+    assert res["pairs"][0]["ranking"]["roc_auc"] > 0.99  # synthetic signal is in log_in_bytes
+
+
+def test_report_labels_variants_separately(world, tmp_path):
+    root, _, _ = world
+    runs = tmp_path / "runs"
+    for i, drop in enumerate([(), ("host_fingerprint",)]):
+        res = run_baseline(
+            root,
+            "a",
+            "logreg",
+            0,
+            train_cap=300,
+            val_cap=100,
+            min_group_flows=50,
+            drop_groups=drop,
+            targets=["a"],
+            log=lambda _: None,
+        )
+        d = runs / f"r{i}"
+        d.mkdir(parents=True)
+        (d / "results.json").write_text(json.dumps(res), encoding="utf-8")
+    df = collect_results(runs)
+    assert set(df["model"]) == {"logreg", "logreg-no_host_fingerprint"}
+
+
+def test_keep_only_group_runs_and_is_labelled(world):
+    root, _, _ = world
+    res = run_baseline(
+        root,
+        "a",
+        "logreg",
+        0,
+        train_cap=300,
+        val_cap=100,
+        min_group_flows=50,
+        keep_groups=("volume",),
+        targets=["a"],
+        log=lambda _: None,
+    )
+    assert res["meta"]["n_features"] == 6
+    assert res["meta"]["variant"] == "only_volume"
+    assert res["pairs"][0]["ranking"]["roc_auc"] > 0.99  # log_in_bytes is in volume

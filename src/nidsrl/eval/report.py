@@ -38,9 +38,11 @@ def collect_results(runs_dir: str | Path, kind: str = "baseline") -> pd.DataFram
         meta = data.get("meta", {})
         if meta.get("kind") != kind:
             continue
+        variant = meta.get("variant", "")
+        label = f"{meta['model']}-{variant}" if variant else meta["model"]
         for pair in data["pairs"]:
             row = {
-                "model": meta["model"],
+                "model": label,
                 "source": pair["source"],
                 "target": pair["target"],
                 "kind": pair["kind"],

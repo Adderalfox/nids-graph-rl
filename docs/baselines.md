@@ -37,3 +37,24 @@ Cost notes: evaluation dominates. Transfer from a source to ToN or CIC scores
 - Off-diagonal cells are the zero-shot transfer results; the gap between a row's
   diagonal and its off-diagonals is the generalization gap the thesis targets.
 - BoT is 99.7% attacks: look at TPR and FPR there, not macro-F1.
+
+## Feature-group ablations (shortcut diagnosis)
+
+Groups (defined a priori in `nidsrl.models.features`): volume, timing, pkt_size,
+retrans, host_fingerprint (TTL, TCP window sizes), tcp_flags, proto.
+
+```bash
+# drop one group at a time (Git Bash)
+for g in volume timing pkt_size retrans host_fingerprint tcp_flags proto; do
+  uv run python scripts/run_baseline.py --models hgb --sources ton --seeds 0 --row-stride 10 --drop-groups $g
+done
+uv run python scripts/make_report.py     # variants appear as hgb-no_<group>
+```
+
+Integrity rules:
+1. Report every ablation, not just the one that helps.
+2. Never choose the main model's feature policy by looking at the performance on a
+   target dataset. The principled route is leave-one-dataset-out validation among
+   the sources, with BoT-IoT kept as a final untouched check.
+3. A large jump in transfer AUC after removing a group is evidence of shortcut
+   learning; it is a finding for the paper, not a tuning knob.
