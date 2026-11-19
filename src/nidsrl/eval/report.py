@@ -19,6 +19,8 @@ METRIC_PATHS: dict[str, tuple[str, ...]] = {
     "pr_auc": ("ranking", "pr_auc"),
     "shared_macro_recall": ("groups", "shared_macro_recall"),
     "unseen_detection_rate": ("groups", "unseen_detection_rate"),
+    "prevented": ("response", "prevented_attack_share"),
+    "collateral": ("response", "collateral_benign_share"),
 }
 
 

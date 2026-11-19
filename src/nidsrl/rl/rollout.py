@@ -117,6 +117,23 @@ def summarize_results(
     }
 
 
+def evaluate_loaded_runs(
+    policy: Policy,
+    runs: list[RunData],
+    *,
+    env_cfg: EnvConfig | None = None,
+    shared: list[str] | None = None,
+    unseen: list[str] | None = None,
+    min_group_flows: int = 500,
+) -> dict[str, Any]:
+    """Evaluate a policy on already loaded runs (used for validation during training)."""
+    env = HostPairEnv(env_cfg)
+    results = [rollout_run(env, r, policy) for r in runs if r.n_groups > 0]
+    if not results:
+        raise ValueError("No runs with data to evaluate")
+    return {"runs": len(results), **summarize_results(results, shared, unseen, min_group_flows)}
+
+
 def evaluate_pair_rl(
     policy: Policy,
     root: str | Path,

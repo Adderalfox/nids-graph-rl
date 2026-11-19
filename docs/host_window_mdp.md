@@ -51,3 +51,11 @@ share, alert share, number of blocks and inspects.
 - Replay-based consequences; attackers cannot adapt to blocks.
 - One 30-minute run per episode: no state carries across runs.
 - Pair-window decisions cannot split mixed flows (ceiling 97.3% on ToN).
+
+## Transitions and discounting (added in 2b-2)
+`observe()` returns, per pair that reappears, the transition (s, a, r, s2, done=False, dt) where dt
+is the number of windows since that pair's last decision (a block of 6 windows gives dt >= 7).
+Targets use gamma ** dt (semi-MDP). Pairs with no further decision in the run get a terminal
+transition (done=True, dt=1). Because the hold consequence (A_held, B_held) is already inside the
+reward, gamma mainly carries "this pair keeps coming back" information; `--gamma 0` (contextual
+bandit) is therefore a required control to show the MDP structure matters.

@@ -103,6 +103,7 @@ class HostPairEnv:
         self.pend_obs = np.zeros((P, OBS_DIM), dtype=np.float32)
         self.pend_act = np.zeros(P, dtype=np.int8)
         self.pend_rew = np.zeros(P, dtype=np.float32)
+        self.pend_t = np.zeros(P, dtype=np.int64)
         self.g_alert = np.zeros(G, dtype=bool)
         self.g_held = np.zeros(G, dtype=bool)
         self.g_score = np.full(G, np.nan, dtype=np.float32)
@@ -171,6 +172,9 @@ class HostPairEnv:
                     "r": self.pend_rew[pp].copy(),
                     "s2": self._obs[done_mask].copy(),
                     "done": np.zeros(len(pp), dtype=bool),
+                    # windows between the decision and the pair's next decision (>= 1):
+                    # semi-MDP discounting uses gamma ** dt
+                    "dt": (self.t - self.pend_t[pp]).astype(np.int64),
                 }
                 self.pend_has[pp] = False
         return {
@@ -256,6 +260,7 @@ class HostPairEnv:
         self.pend_obs[p] = self._obs
         self.pend_act[p] = a
         self.pend_rew[p] = reward
+        self.pend_t[p] = self.t
         self.pend_has[p] = True
         self.last_logn[p] = np.log1p(r.g_n[gids]).astype(np.float32)
         self.n_active[p] += 1
@@ -276,6 +281,7 @@ class HostPairEnv:
             "r": self.pend_rew[left].copy(),
             "s2": np.zeros((len(left), OBS_DIM), dtype=np.float32),
             "done": np.ones(len(left), dtype=bool),
+            "dt": np.ones(len(left), dtype=np.int64),
         }
         self.pend_has[left] = False
         score = np.where(np.isnan(self.g_score), -np.inf, self.g_score).astype(np.float32)

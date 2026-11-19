@@ -12,8 +12,8 @@
 | 1d | Metrics module, split loader and evaluation harness | metrics + harness tests | done |
 | 2a | Supervised baselines (logreg, RF, HistGB) + results matrix + feature-group ablations | baseline transfer table | first run done (ton/hgb); full runs + ablations pending |
 | 2b-0 | Entity-window audit: decision granularity, block semantics, flow-level ceiling | audit numbers incl. ceiling | done (decision: host pair, 10 s windows, inspect 10 s / block 60 s) |
-| 2b-1 | Host-pair environment, rollout/evaluation, oracle diagnostics | check_mdp matches the audit | code delivered, awaiting check_mdp output |
-| 2b-2 | MLP DQN agent (experiment A) trained on source train, evaluated on all pairs | baseline RL table | not started |
+| 2b-1 | Host-pair environment, rollout/evaluation, oracle diagnostics | check_mdp matches the audit | done (oracle numbers match the audit within noise on all four datasets) |
+| 2b-2 | MLP DQN-family agent (experiment A) + supervised pair baseline in the same env | baseline RL table | code delivered (torch parts untested in the sandbox), awaiting smoke run |
 | 3 | Windowed host/flow graph builder and encoder | graph encoder vs MLP, transfer gap | not started |
 | 4 | Dueling Double DQN on graph embeddings, PER baseline | B vs A over 5 seeds | not started |
 | 5 | Topology-aware NSGA-II replay | C vs B, replay overhead | not started |
@@ -102,5 +102,10 @@
 > Timed-block audit done (docs/findings.md); flow-level ceiling audit pending.
 > Ceiling audit: pair-level oracle macro-F1 ceilings 100/99.7/97.3/99.2 (unsw/cic/ton/bot): go.
 > Environment implemented (nidsrl.rl: rundata, env, rollout; docs/host_window_mdp.md).
-> Current phase: 2b-1 (awaiting scripts/check_mdp.py outputs), then 2b-2 DQN agent (needs torch).
+> check_mdp (real data): oracle any-attack block-60s gives prevented/collateral 73.1/0.0 (unsw), 79.2/0.4 (cic, stride 5),
+> 80.7/30.8 (ton, stride 5), 73.0/15.6 (bot): matches the audit. Phase 2b-1 done.
+> Phase 2b-2 delivered: nidsrl.rl (replay, targets, obs mask, policy, trainer, dqn torch backend),
+> experiments/dqn.py (train_dqn.py), experiments/pair_baseline.py (run_pair_baseline.py); transitions carry dt
+> (semi-MDP discount gamma**dt). Main feature policy drops host_fingerprint; run all-features and gamma=0 as controls.
+> Current phase: 2b-2, awaiting the first smoke runs (train_dqn.py / run_pair_baseline.py).
 > Resume from Phase ___.
