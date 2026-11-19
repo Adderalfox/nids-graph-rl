@@ -1,1 +1,1 @@
-"""Environment, agent and replay strategies (Phases 2, 4, 5)."""
+"""Host-pair response environment, rollouts and agents (Phase 2b onward)."""

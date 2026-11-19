@@ -30,8 +30,12 @@ def make_prepared(root, name, campaigns, n_blocks=24, flows_per_block=1200, seed
         df["log_in_bytes"] = label * 5.0 + rng.normal(0, 0.1, n)
         df.insert(0, "start_ms", start)
         df.insert(1, "end_ms", start + 5)
-        df.insert(2, "src_id", 0)
-        df.insert(3, "dst_id", 1)
+        # attacks come from a few attacker hosts, benign traffic from many others, so that
+        # host pairs are (almost) pure like in the real datasets
+        is_attack = label == 1
+        src = np.where(is_attack, rng.integers(0, 4, n), rng.integers(10, 30, n))
+        df.insert(2, "src_id", src.astype(np.int32))
+        df.insert(3, "dst_id", rng.integers(100, 105, n).astype(np.int32))
         df.insert(4, "src_port", 1)
         df.insert(5, "dst_port", 80)
         df.insert(6, "label", label)

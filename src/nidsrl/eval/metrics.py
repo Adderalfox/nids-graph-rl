@@ -26,14 +26,8 @@ def _safe_div(a: float, b: float) -> float | None:
     return float(a / b) if b else None
 
 
-def binary_report(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, Any]:
-    """Confusion-matrix metrics for hard predictions (1 = attack)."""
-    y_true = np.asarray(y_true).astype(bool)
-    y_pred = np.asarray(y_pred).astype(bool)
-    tp = int(np.sum(y_true & y_pred))
-    fp = int(np.sum(~y_true & y_pred))
-    fn = int(np.sum(y_true & ~y_pred))
-    tn = int(np.sum(~y_true & ~y_pred))
+def binary_report_from_counts(tp: float, fp: float, fn: float, tn: float) -> dict[str, Any]:
+    """Confusion-matrix metrics from (possibly weighted) counts (1 = attack)."""
     tpr = _safe_div(tp, tp + fn)
     fpr = _safe_div(fp, fp + tn)
     precision = _safe_div(tp, tp + fp)
@@ -43,10 +37,10 @@ def binary_report(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, Any]:
     tnr = None if fpr is None else 1.0 - fpr
     balanced = None if tpr is None or tnr is None else (tpr + tnr) / 2
     return {
-        "tp": tp,
-        "fp": fp,
-        "fn": fn,
-        "tn": tn,
+        "tp": int(tp),
+        "fp": int(fp),
+        "fn": int(fn),
+        "tn": int(tn),
         "tpr": tpr,
         "fpr": fpr,
         "precision": precision,
@@ -56,36 +50,46 @@ def binary_report(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, Any]:
     }
 
 
-def _curve(y_true: np.ndarray, y_score: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Cumulative (tp, fp) at each distinct score threshold, descending."""
-    order = np.argsort(-y_score, kind="stable")
-    ys = y_true[order].astype(np.int64)
-    ss = y_score[order]
-    tp = np.cumsum(ys)
-    fp = np.cumsum(1 - ys)
-    last = np.concatenate([np.nonzero(np.diff(ss))[0], [len(ss) - 1]])
-    return tp[last].astype(np.float64), fp[last].astype(np.float64)
+def binary_report(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, Any]:
+    """Confusion-matrix metrics for hard predictions (1 = attack)."""
+    y_true = np.asarray(y_true).astype(bool)
+    y_pred = np.asarray(y_pred).astype(bool)
+    return binary_report_from_counts(
+        int(np.sum(y_true & y_pred)),
+        int(np.sum(~y_true & y_pred)),
+        int(np.sum(y_true & ~y_pred)),
+        int(np.sum(~y_true & ~y_pred)),
+    )
 
 
-def ranking_report(
-    y_true: np.ndarray, y_score: np.ndarray, fpr_targets: tuple[float, ...] = FPR_TARGETS
+def ranking_report_weighted(
+    scores: np.ndarray,
+    pos: np.ndarray,
+    neg: np.ndarray,
+    fpr_targets: tuple[float, ...] = FPR_TARGETS,
 ) -> dict[str, Any]:
-    """ROC-AUC, average precision (PR-AUC) and TPR at fixed FPR from continuous scores."""
-    y_true = np.asarray(y_true).astype(np.int64)
-    y_score = np.asarray(y_score, dtype=np.float64)
-    n_pos = int(y_true.sum())
-    n_neg = int(len(y_true) - n_pos)
+    """ROC-AUC, PR-AUC and TPR at fixed FPR when each row stands for `pos` attack flows and
+    `neg` benign flows that share one score (e.g. an entity-window)."""
+    scores = np.asarray(scores, dtype=np.float64)
+    pos = np.asarray(pos, dtype=np.float64)
+    neg = np.asarray(neg, dtype=np.float64)
+    n_pos, n_neg = float(pos.sum()), float(neg.sum())
     out: dict[str, Any] = {
         "roc_auc": None,
         "pr_auc": None,
-        "prevalence": _safe_div(n_pos, len(y_true)),
+        "prevalence": _safe_div(n_pos, n_pos + n_neg),
     }
     for f in fpr_targets:
         out[f"tpr_at_fpr_{f:g}"] = None
     if n_pos == 0 or n_neg == 0:
         return out
 
-    tp, fp = _curve(y_true, y_score)
+    order = np.argsort(-scores, kind="stable")
+    ss, pp, nn = scores[order], pos[order], neg[order]
+    tp, fp = np.cumsum(pp), np.cumsum(nn)
+    last = np.concatenate([np.nonzero(np.diff(ss))[0], [len(ss) - 1]])
+    tp, fp = tp[last], fp[last]
+
     tpr = np.concatenate([[0.0], tp / n_pos])
     fpr = np.concatenate([[0.0], fp / n_neg])
     out["roc_auc"] = float(np.sum((fpr[1:] - fpr[:-1]) * (tpr[1:] + tpr[:-1]) / 2.0))
@@ -99,6 +103,14 @@ def ranking_report(
         idx = int(np.searchsorted(fpr, f, side="right")) - 1
         out[f"tpr_at_fpr_{f:g}"] = float(tpr[idx])
     return out
+
+
+def ranking_report(
+    y_true: np.ndarray, y_score: np.ndarray, fpr_targets: tuple[float, ...] = FPR_TARGETS
+) -> dict[str, Any]:
+    """ROC-AUC, average precision (PR-AUC) and TPR at fixed FPR from continuous scores."""
+    y = np.asarray(y_true).astype(np.int64)
+    return ranking_report_weighted(y_score, y, 1 - y, fpr_targets)
 
 
 def threshold_at_fpr(y_true: np.ndarray, y_score: np.ndarray, fpr: float = 0.01) -> float:
@@ -144,6 +156,42 @@ def group_report(
         ),
         "unseen_detection_rate": float(y_pred[unseen_mask].mean()) if n_unseen else None,
         "unseen_flows": n_unseen,
+    }
+
+
+def group_report_weighted(
+    alert: np.ndarray,
+    cat_counts: np.ndarray,
+    shared: list[str],
+    unseen: list[str],
+    min_group_flows: int = 500,
+) -> dict[str, Any]:
+    """Per-group recall when each row is an entity-window with per-category flow counts.
+
+    cat_counts has shape (rows, len(GROUPS)); every flow in a row shares the row's alert.
+    """
+    alert = np.asarray(alert).astype(bool)
+    counts = np.asarray(cat_counts, dtype=np.float64)
+
+    def one(name: str) -> dict[str, Any] | None:
+        c = counts[:, GROUPS.index(name)]
+        n = float(c.sum())
+        if n < min_group_flows:
+            return None
+        return {"n": int(n), "recall": float(c[alert].sum() / n)}
+
+    shared_out = {g: r for g in shared if g != BENIGN and (r := one(g)) is not None}
+    unseen_out = {g: r for g in unseen if g != BENIGN and (r := one(g)) is not None}
+    n_unseen = sum(r["n"] for r in unseen_out.values())
+    detected = sum(float(counts[alert, GROUPS.index(g)].sum()) for g in unseen_out)
+    return {
+        "shared": shared_out,
+        "unseen": unseen_out,
+        "shared_macro_recall": (
+            float(np.mean([r["recall"] for r in shared_out.values()])) if shared_out else None
+        ),
+        "unseen_detection_rate": (detected / n_unseen) if n_unseen else None,
+        "unseen_flows": int(n_unseen),
     }
 
 

@@ -11,8 +11,9 @@
 | 1c | Stratified purged splits, train-only scaler, cross-dataset protocol | split files + leakage tests | done |
 | 1d | Metrics module, split loader and evaluation harness | metrics + harness tests | done |
 | 2a | Supervised baselines (logreg, RF, HistGB) + results matrix + feature-group ablations | baseline transfer table | first run done (ton/hgb); full runs + ablations pending |
-| 2b-0 | Entity-window audit: decision granularity, block semantics, flow-level ceiling | audit numbers incl. ceiling | host/pair/service + timed blocks done; ceiling pending |
-| 2b | Host-window environment (true MDP) and MLP+DQN baseline | experiment A numbers | blocked on 2b-0 results |
+| 2b-0 | Entity-window audit: decision granularity, block semantics, flow-level ceiling | audit numbers incl. ceiling | done (decision: host pair, 10 s windows, inspect 10 s / block 60 s) |
+| 2b-1 | Host-pair environment, rollout/evaluation, oracle diagnostics | check_mdp matches the audit | code delivered, awaiting check_mdp output |
+| 2b-2 | MLP DQN agent (experiment A) trained on source train, evaluated on all pairs | baseline RL table | not started |
 | 3 | Windowed host/flow graph builder and encoder | graph encoder vs MLP, transfer gap | not started |
 | 4 | Dueling Double DQN on graph embeddings, PER baseline | B vs A over 5 seeds | not started |
 | 5 | Topology-aware NSGA-II replay | C vs B, replay overhead | not started |
@@ -99,5 +100,7 @@
 > Provisional MDP: per host pair per 10 s window; monitor / inspect (10 s quarantine) /
 > block (60 s); class-normalised rewards; flow-level evaluation with alert = not monitor.
 > Timed-block audit done (docs/findings.md); flow-level ceiling audit pending.
-> Current phase: 2b-0 ceiling audit (awaiting output), then 2b environment.
+> Ceiling audit: pair-level oracle macro-F1 ceilings 100/99.7/97.3/99.2 (unsw/cic/ton/bot): go.
+> Environment implemented (nidsrl.rl: rundata, env, rollout; docs/host_window_mdp.md).
+> Current phase: 2b-1 (awaiting scripts/check_mdp.py outputs), then 2b-2 DQN agent (needs torch).
 > Resume from Phase ___.

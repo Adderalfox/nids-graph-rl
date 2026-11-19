@@ -93,3 +93,25 @@ Reading:
   separately and flagged as simulated.
 - Risk: flows inherit their pair-window's action, so mixed pair-windows cap flow-level
   detection (ToN: 27.7% of flows are in mixed pair-windows). The ceiling audit quantifies it.
+
+## 4. Flow-level ceiling of entity decisions (oracle: each flow inherits its entity-window label)
+
+| | host: majority TPR / FPR / macro-F1 | pair: majority TPR / FPR / macro-F1 | pair: any-attack rule FPR |
+|---|---|---|---|
+| unsw | 100 / 0.0 / 100 | 100 / 0.0 / 100 | 0.0 |
+| cic | 99.5 / 0.2 / 99.4 | 99.8 / 0.1 / 99.7 | 0.5 |
+| ton | 94.3 / 5.1 / 94.4 | 96.4 / 1.9 / 97.3 | 30.8 |
+| bot | 100 / 5.6 / 97.8 | 100 / 1.3 / 99.2 | 10.7 |
+
+Reading:
+- Pair-level decisions cap flow-level macro-F1 at 97.3% on ToN (94.4% at host level), well
+  above the baselines (0.90 in-dataset on ToN), so the pair-level design does not handicap
+  the agent against flow-level classifiers.
+- "Block on any suspicion" is a bad policy on ToN (30.8% FPR): the agent must learn to
+  discriminate, not just react.
+
+## Decision
+Decisions are made per host pair per 10 s window with three graded actions whose effects
+come from the audit: monitor (none), inspect (10 s hold), block (60 s hold). Rewards are
+class-balanced. Flow-level evaluation counts a flow as alerted if its pair's action in that
+window was not monitor or the pair was held at that time.

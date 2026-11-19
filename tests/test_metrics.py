@@ -83,3 +83,34 @@ def test_evaluate_arrays_combines_sections():
     assert rep["ranking"]["roc_auc"] == pytest.approx(1.0)
     assert rep["groups"]["shared"]["dos"]["recall"] == 1.0
     assert evaluate_arrays(y, y, group)["ranking"] is None
+
+
+def test_weighted_ranking_equals_expanded_flows():
+    from nidsrl.eval.metrics import ranking_report_weighted
+
+    rng = np.random.default_rng(0)
+    score = np.round(rng.normal(size=300), 1)
+    pos = rng.integers(0, 6, 300)
+    neg = rng.integers(0, 9, 300)
+    weighted = ranking_report_weighted(score, pos, neg)
+    y = np.concatenate([np.ones(p) for p in pos] + [np.zeros(n) for n in neg])
+    s = np.concatenate(
+        [np.repeat(score[i], pos[i]) for i in range(300)]
+        + [np.repeat(score[i], neg[i]) for i in range(300)]
+    )
+    expanded = ranking_report(y, s)
+    for k in ("roc_auc", "pr_auc", "tpr_at_fpr_0.01"):
+        assert weighted[k] == pytest.approx(expanded[k], abs=1e-9)
+
+
+def test_group_report_weighted():
+    from nidsrl.eval.metrics import group_report_weighted
+
+    cats = np.zeros((4, len(GROUPS)))
+    cats[:, GROUPS.index("dos")] = [600, 400, 0, 0]
+    cats[:, GROUPS.index("web")] = [0, 0, 500, 500]
+    alert = np.array([True, False, True, False])
+    r = group_report_weighted(alert, cats, ["dos"], ["web"], min_group_flows=100)
+    assert r["shared"]["dos"]["recall"] == pytest.approx(0.6)
+    assert r["unseen"]["web"]["recall"] == pytest.approx(0.5)
+    assert r["unseen_detection_rate"] == pytest.approx(0.5)

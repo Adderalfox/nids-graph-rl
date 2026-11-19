@@ -1,45 +1,53 @@
-# Host-window response MDP (draft; finalized after the Phase 2b-0 audit)
+# Host-pair response MDP (implemented in `nidsrl.rl`)
 
-## Idea
-At each 10 s window the agent sees the temporal host graph and chooses, for every
-active host, one of: monitor, inspect, block. A shared Q-head outputs 3 values per
-node (factored per-node Q-learning with shared weights); the joint action is the
-per-host choice for the window.
+## Why host pairs, 10 s windows, 30-minute episodes
+Audits (docs/findings.md) show that per-host decisions have large benign collateral on
+ToN/BoT and that per-service decisions explode in size, while per-pair decisions keep a flow-level
+oracle ceiling of 97-100% macro-F1. An episode is one 30-minute run of the split plan; the
+purged gaps between runs guarantee train/test independence, and temporal state resets at each
+run start.
 
-## It is a SIMULATED response environment
-The datasets are recorded traffic. No real counterfactual exists: we cannot observe
-what an attacker would have done after being blocked. Effects are therefore simulated
-by replaying the recording with the acted-on host's later flows modified:
-- monitor: no change.
-- inspect (proposal): throttle / divert for deep inspection: a fraction of the host's
-  next-window flows is held (attack flows mitigated with probability rho_a, benign
-  flows delayed or dropped with probability rho_b < rho_a); small per-action cost;
-  limited inspection budget per window (analyst capacity).
-- block: the host's flows are removed from all later windows of the run.
+## Entities, observations, actions
+- Entity: (src host, dst host) pair. Group: one entity's flows in one 10 s window.
+- Observation per active entity (97 numbers, identity-free): mean of the 55 scaled flow
+  features, max of the 35 continuous ones, log flow count, and history features keyed by the
+  stable host-pair id: previous log count, its change, log windows seen, last action
+  inspect/block flags, time since a hold ended.
+- Actions: 0 monitor; 1 inspect = pair's flows are held (removed) for 1 window; 2 block = held
+  for 6 windows. Held flows never reach the agent, so actions change the next state. Effects
+  are a replay-based simulation on recorded flows, not real counterfactual traffic.
+- Ground-truth attack/benign counts feed rewards and evaluation only, never observations
+  (`test_observation_never_depends_on_labels`).
 
-Rewards use recorded labels: damage prevented (attack flows or bytes removed), benign
-collateral (benign flows removed), action costs. Cost parameters are assumptions;
-the paper must say so and include a sensitivity analysis.
+## Reward
+Per acted entity-window, class-balanced weights u_a = 0.5/p_attack, u_b = 0.5/p_benign
+(source train only):
 
-## Why this gives actions real consequences
-Blocking or throttling changes the next window's graph (the host's edges disappear),
-so the transition depends on the action. That is what makes it an MDP rather than a
-contextual bandit.
+    flow term  alert:    det_gain*u_a*A - fp_cost*u_b*B
+               no alert: -miss_cost*u_a*A
+    response   alert:    prevent_gain*u_a*A_held - collateral_cost*u_b*B_held
+    r = sign(x)*log1p(|x|) - action_cost[a]
 
-## Evaluation (comparable to baselines)
-For flow-level metrics, a flow is "alerted" if its source host's action in that
-window is not monitor. The continuous score for ROC metrics is
-max(Q(inspect), Q(block)) - Q(monitor). No label information from inspection may be
-visible to the agent at test time. Response metrics (attack flows prevented, benign
-collateral, inspections used) are reported separately and are parameter dependent.
+A, B are the attack and benign flows of the entity in the window; A_held, B_held those in the
+held windows that follow. The log compresses heavy-tailed flow counts. Weights are
+hyperparameters chosen on SOURCE validation only; they are assumptions and need a
+sensitivity analysis in the paper.
 
-## Realism checks (see scripts/audit_hosts.py)
-1. Active source hosts per window: bounds the action space.
-2. Host-window purity: share of host-windows that mix benign and attack flows.
-3. Attacker persistence: if attackers are one-shot, blocking prevents nothing.
-4. Preventable attack-flow share and benign collateral: the achievable reward range.
+## Evaluation (comparable with the supervised baselines)
+Every flow inherits the alert state of its entity-window: alerted if the pair's action in that
+window was not monitor, or the pair was held when the flow occurred. Held attack flows count as
+detected, held benign flows as false alarms. The ranking score is the agent's attack score
+(for DQN: max(Q_inspect, Q_block) - Q_monitor); held flows inherit the score at the time of the
+hold. Response metrics are reported separately: prevented attack share, benign collateral
+share, alert share, number of blocks and inspects.
 
-## Open questions after the audit
-- Host-level label rule for mixed hosts.
-- Cap on hosts per window (top-K by flow count) for the 4 GB GPU.
-- Whether `inspect` earns its place or collapses into a hedged block.
+## Validation tools
+- `scripts/check_mdp.py`: runs never / oracle policies. The oracle any-attack block policy
+  must reproduce the TIMED BLOCK 60 s line of `audit_hosts.py --granularity pair` within about
+  a point (`test_env_matches_hostaudit_timed_block_oracle` checks the equivalence exactly).
+- Oracle policies read ground truth and exist only for diagnostics.
+
+## Known limitations
+- Replay-based consequences; attackers cannot adapt to blocks.
+- One 30-minute run per episode: no state carries across runs.
+- Pair-window decisions cannot split mixed flows (ceiling 97.3% on ToN).
