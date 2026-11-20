@@ -25,14 +25,16 @@ from nidsrl.models.features import FEATURE_GROUPS
 from nidsrl.rl.trainer import TrainConfig
 from nidsrl.utils.runs import create_run_dir
 
+GROUP_CHOICES = [*sorted(FEATURE_GROUPS), "flowcount"]
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--source", required=True, choices=["unsw", "cic", "ton"])
     ap.add_argument("--seeds", nargs="+", type=int, default=[0])
     ap.add_argument("--variant", choices=sorted(VARIANTS), default="d3qn")
-    ap.add_argument("--drop-groups", nargs="*", default=[], choices=sorted(FEATURE_GROUPS))
-    ap.add_argument("--keep-groups", nargs="*", default=[], choices=sorted(FEATURE_GROUPS))
+    ap.add_argument("--drop-groups", nargs="*", default=[], choices=GROUP_CHOICES)
+    ap.add_argument("--keep-groups", nargs="*", default=[], choices=GROUP_CHOICES)
     ap.add_argument("--tag", default="")
     d = TrainConfig()
     ap.add_argument("--epochs", type=int, default=d.epochs)

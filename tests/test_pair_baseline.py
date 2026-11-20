@@ -43,3 +43,11 @@ def test_pair_baseline_runs_end_to_end_and_feeds_report(world, tmp_path):
     s = summarize(df)
     assert {"prevented_mean", "collateral_mean"} <= set(s.columns)
     assert set(s["model"]) == {"hgb-pair-inspect", "hgb-pair-block"}
+
+
+def test_threshold_floor_prevents_alert_everything_on_separable_source(world):
+    root, _, _ = world
+    out = run_pair_baseline(root, "a", 0, min_group_flows=50, log=lambda *_: None)
+    m = out["block"]["meta"]
+    q = m["threshold_fpr_quantile"]
+    assert m["threshold"] == (q if q >= m["saturated_below"] else m["fallback_threshold"])

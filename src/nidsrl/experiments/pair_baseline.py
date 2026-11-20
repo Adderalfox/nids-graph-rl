@@ -88,6 +88,8 @@ def run_pair_baseline(
     drop_groups: tuple[str, ...] = (),
     keep_groups: tuple[str, ...] = (),
     fpr_target: float = 0.01,
+    saturated_below: float = 1e-3,
+    fallback_threshold: float = 0.5,
     benign_rate: float = 0.2,
     inspect_windows: int = 1,
     block_windows: int = 6,
@@ -120,8 +122,12 @@ def run_pair_baseline(
 
     xv, av, bv, wv = collect_groups(data.runs("val"), keep, 1.0, seed + 1, env_cfg)
     sv = est.predict_proba(xv)[:, 1]
-    thr = weighted_threshold_at_fpr(sv, bv * wv, fpr_target)
-    log(f"  threshold={thr:.5f} (source-val flow-weighted FPR target {fpr_target})")
+    thr_fpr = weighted_threshold_at_fpr(sv, bv * wv, fpr_target)
+    # A (near-)perfectly separable source puts the FPR quantile on the saturated floor
+    # (score ~ 0), so "alert above it" would flag everything on a new dataset. Only in that
+    # degenerate case fall back to p=0.5 of the class-balanced model.
+    thr = thr_fpr if thr_fpr >= saturated_below else fallback_threshold
+    log(f"  threshold={thr:.5f} (val FPR-quantile {thr_fpr:.6f}, fallback {fallback_threshold})")
 
     def score_fn(obs: np.ndarray) -> np.ndarray:
         return est.predict_proba(obs)[:, 1]
@@ -149,6 +155,9 @@ def run_pair_baseline(
                 "source": source,
                 "seed": seed,
                 "threshold": thr,
+                "threshold_fpr_quantile": thr_fpr,
+                "saturated_below": saturated_below,
+                "fallback_threshold": fallback_threshold,
                 "fpr_target": fpr_target,
                 "benign_rate": benign_rate,
                 "n_obs_features": len(keep),

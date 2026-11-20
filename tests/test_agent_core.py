@@ -77,6 +77,11 @@ def test_obs_mask_drops_group_in_mean_and_max_blocks():
     assert len(obs_keep_indices(keep_groups=("volume",))) == 6 + 6 + 7
 
 
+def test_flowcount_pseudo_group_removes_one_column():
+    assert len(obs_keep_indices(drop_groups=("flowcount",))) == OBS_DIM - 1
+    assert N_FEATURES + 35 not in obs_keep_indices(drop_groups=("flowcount",))
+
+
 def test_env_transitions_carry_dt():
     env = HostPairEnv(EnvConfig(inspect_windows=1, block_windows=2, reward=RewardConfig()))
     run = make_run(SCENARIO, n_windows=8)
