@@ -36,3 +36,34 @@ class LinearLearner:
         self.bt = (1 - self.tau) * self.bt + self.tau * self.b
         self.fits += 1
         return {"loss": float((g**2).mean()), "td_error": np.abs(err)}
+
+
+class LinearScorer:
+    """Numpy logistic regression on edge features implementing the graph Scorer protocol."""
+
+    def __init__(self, d, lr=0.5):
+        self.w, self.b, self.lr = np.zeros(d), 0.0, lr
+
+    def _p(self, x):
+        return 1 / (1 + np.exp(-np.clip(x @ self.w + self.b, -30, 30)))
+
+    def fit_batch(self, b, y, w):
+        p = self._p(b.x)
+        g = (p - y) * w / max(w.sum(), 1e-9)
+        self.w -= self.lr * (b.x.T @ g)
+        self.b -= self.lr * g.sum()
+        return self.eval_loss(b, y, w)[0]
+
+    def eval_loss(self, b, y, w):
+        p = np.clip(self._p(b.x), 1e-7, 1 - 1e-7)
+        per = -(y * np.log(p) + (1 - y) * np.log(1 - p))
+        return float((per * w).sum() / max(w.sum(), 1e-9)), float(w.sum())
+
+    def score(self, snap):
+        return self._p(snap.x).astype(np.float32)
+
+    def state(self):
+        return (self.w.copy(), self.b)
+
+    def load(self, st):
+        self.w, self.b = st[0].copy(), st[1]

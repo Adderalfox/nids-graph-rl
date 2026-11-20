@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 
 from nidsrl.experiments.rl_common import SourceData, ablation_tag, source_env_cfg, source_pairs
-from nidsrl.rl.env import BLOCK, INSPECT, EnvConfig, HostPairEnv
+from nidsrl.rl.env import BLOCK, INSPECT, OBS_DIM, EnvConfig, HostPairEnv
 from nidsrl.rl.obs import obs_keep_indices
 from nidsrl.rl.policy import ThresholdPolicy
 from nidsrl.rl.rollout import evaluate_loaded_runs, evaluate_pair_rl, rollout_run
@@ -88,6 +88,7 @@ def run_pair_baseline(
     drop_groups: tuple[str, ...] = (),
     keep_groups: tuple[str, ...] = (),
     fpr_target: float = 0.01,
+    max_iter: int = 200,
     saturated_below: float = 1e-3,
     fallback_threshold: float = 0.5,
     benign_rate: float = 0.2,
@@ -97,9 +98,15 @@ def run_pair_baseline(
     targets: list[str] | None = None,
     min_group_flows: int = 500,
     tag: str = "",
+    alert_actions: tuple[str, ...] = ("inspect", "block"),
+    group_cache: dict[str, Any] | None = None,
     log: Callable[[str], None] = print,
 ) -> dict[str, dict[str, Any]]:
-    """Returns {'inspect': results, 'block': results} (one fitted model, two alert actions)."""
+    """Returns {'inspect': results, 'block': results} (one fitted model, two alert actions).
+
+    `group_cache` (a dict owned by the caller) lets many feature policies on the same source
+    and seed reuse the collected pair-windows: they are recorded with ALL columns and sliced.
+    """
     from sklearn.ensemble import HistGradientBoostingClassifier
 
     root = Path(root)
@@ -110,17 +117,26 @@ def run_pair_baseline(
     ua, ub = env_cfg.reward.u_a, env_cfg.reward.u_b
     pairs = source_pairs(root, source, targets)
 
-    log(f"[hgb-pair/{source}/s{seed}] collecting train pair-windows")
-    x, a, b, ws = collect_groups(data.runs("train"), keep, benign_rate, seed, env_cfg)
+    full = np.arange(OBS_DIM)
+    ck = f"{source}/{seed}/{benign_rate}"
+    if group_cache is not None and ck in group_cache:
+        (x_all, a, b, ws), (xv_all, _av, bv, wv) = group_cache[ck]
+    else:
+        log(f"[hgb-pair/{source}/s{seed}] collecting train/val pair-windows")
+        train_g = collect_groups(data.runs("train"), full, benign_rate, seed, env_cfg)
+        val_g = collect_groups(data.runs("val"), full, 1.0, seed + 1, env_cfg)
+        (x_all, a, b, ws), (xv_all, _av, bv, wv) = train_g, val_g
+        if group_cache is not None:
+            group_cache[ck] = (train_g, val_g)
+    x, xv = x_all[:, keep], xv_all[:, keep]
     y = ((a >= b) & (a > 0)).astype(np.int64)
     weight = np.log1p(ua * a + ub * b) * ws
     log(f"  train groups={len(y):,} attack-majority={int(y.sum()):,}")
     est = HistGradientBoostingClassifier(
-        max_iter=200, learning_rate=0.1, early_stopping=False, random_state=seed
+        max_iter=max_iter, learning_rate=0.1, early_stopping=False, random_state=seed
     )
     est.fit(x, y, sample_weight=weight)
 
-    xv, av, bv, wv = collect_groups(data.runs("val"), keep, 1.0, seed + 1, env_cfg)
     sv = est.predict_proba(xv)[:, 1]
     thr_fpr = weighted_threshold_at_fpr(sv, bv * wv, fpr_target)
     # A (near-)perfectly separable source puts the FPR quantile on the saturated floor
@@ -134,6 +150,8 @@ def run_pair_baseline(
 
     out = {}
     for name, action in (("inspect", INSPECT), ("block", BLOCK)):
+        if name not in alert_actions:
+            continue
         policy = ThresholdPolicy(score_fn, thr, action, keep)
         val = evaluate_loaded_runs(
             policy, data.runs("val"), env_cfg=env_cfg, min_group_flows=min_group_flows

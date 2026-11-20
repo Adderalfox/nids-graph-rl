@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 
+from nidsrl.graph.snapshot import Snapshot, build_snapshot
 from nidsrl.rl.env import BLOCK, HostPairEnv
 from nidsrl.rl.targets import attack_score, select_actions
 
@@ -59,4 +60,25 @@ class ThresholdPolicy:
         if self.keep is not None:
             x = x[:, self.keep]
         s = np.asarray(self.score_fn(x), dtype=np.float32)
+        return np.where(s > self.threshold, self.alert_action, 0).astype(np.int64), s
+
+
+class GraphThresholdPolicy:
+    """Alert when score_fn(snapshot) > threshold. The snapshot is the current window's graph."""
+
+    def __init__(
+        self,
+        score_fn: Callable[[Snapshot], np.ndarray],
+        threshold: float,
+        alert_action: int = BLOCK,
+        keep: np.ndarray | None = None,
+    ) -> None:
+        self.score_fn, self.threshold = score_fn, threshold
+        self.alert_action, self.keep = alert_action, keep
+
+    def act(self, obs: dict[str, Any], env: HostPairEnv) -> tuple[np.ndarray, np.ndarray]:
+        if len(obs["obs"]) == 0:
+            return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.float32)
+        snap = build_snapshot(obs["obs"], obs["src"], obs["dst"], self.keep)
+        s = np.asarray(self.score_fn(snap), dtype=np.float32)
         return np.where(s > self.threshold, self.alert_action, 0).astype(np.int64), s

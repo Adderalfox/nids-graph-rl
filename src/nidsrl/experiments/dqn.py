@@ -45,6 +45,7 @@ def run_dqn(
     tau: float = 0.005,
     inspect_windows: int = 1,
     block_windows: int = 6,
+    fp_cost: float = 1.0,
     val_stride: int = 1,
     eval_stride: int = 1,
     targets: list[str] | None = None,
@@ -65,7 +66,7 @@ def run_dqn(
     dev = resolve_device(device)
     keep = obs_keep_indices(drop_groups, keep_groups)
     data = SourceData(root, source)
-    env_cfg = source_env_cfg(data.plan, inspect_windows, block_windows)
+    env_cfg = source_env_cfg(data.plan, inspect_windows, block_windows, fp_cost)
     pairs = source_pairs(root, source, targets)
     learner = TorchLearner(
         len(keep), hidden, VARIANTS[variant]["dueling"], lr=lr, tau=tau, device=dev
@@ -120,7 +121,8 @@ def run_dqn(
             "lr": lr,
             "tau": tau,
             "train": tc.to_dict(),
-            "env": {"inspect_windows": inspect_windows, "block_windows": block_windows},
+            "env": {"inspect_windows": inspect_windows, "block_windows": block_windows,
+                    "fp_cost": fp_cost},
             "reward": vars(env_cfg.reward) | {"action_cost": list(env_cfg.reward.action_cost)},
             "eval_stride": eval_stride,
         },

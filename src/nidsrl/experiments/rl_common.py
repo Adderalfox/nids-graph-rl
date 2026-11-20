@@ -25,10 +25,20 @@ def source_pairs(root: Path, source: str, targets: list[str] | None) -> list[dic
     return pairs
 
 
-def source_env_cfg(plan: dict[str, Any], inspect_windows: int, block_windows: int) -> EnvConfig:
-    """Environment whose class weights come from SOURCE TRAIN only."""
+def source_env_cfg(
+    plan: dict[str, Any], inspect_windows: int, block_windows: int, fp_cost: float = 1.0
+) -> EnvConfig:
+    """Environment whose class weights come from SOURCE TRAIN only.
+
+    `fp_cost` multiplies the benign-alert penalty AND the collateral penalty. 1.0 is the
+    class-balanced reward (a balanced-error operating point, FPR of tens of percent); larger
+    values trade recall for fewer false alarms. Choose it on SOURCE validation only.
+    """
     ua, ub = class_weights(plan, "train")
-    return EnvConfig(inspect_windows, block_windows, RewardConfig(u_a=ua, u_b=ub))
+    return EnvConfig(
+        inspect_windows, block_windows,
+        RewardConfig(u_a=ua, u_b=ub, fp_cost=fp_cost, collateral_cost=fp_cost),
+    )  # fmt: skip
 
 
 class SourceData:
@@ -39,11 +49,11 @@ class SourceData:
         self.plan = load_plan(root / "splits" / f"{source}.json")
         self.scaler = load_scaler(root / "scalers" / f"{source}.json")
         self._caches = {
-            s: RunCache(lambda rid, s=s: self._load(s, rid), b)
+            s: RunCache(lambda rid, s=s: self.load_uncached(s, rid), b)
             for s, b in (("train", train_bytes), ("val", 2 * 2**30))
         }
 
-    def _load(self, split: str, rid: int) -> RunData:
+    def load_uncached(self, split: str, rid: int) -> RunData:
         return load_run(self.root / self.source, self.plan, split, rid, self.scaler)
 
     def ids(self, split: str) -> list[int]:

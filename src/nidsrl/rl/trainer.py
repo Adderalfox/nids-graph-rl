@@ -60,21 +60,27 @@ class TrainConfig:
 class RunCache:
     """Loads runs on demand and keeps them in RAM up to an approximate byte budget."""
 
-    def __init__(self, loader: Callable[[int], RunData], max_bytes: int = 3 * 2**30) -> None:
+    def __init__(
+        self,
+        loader: Callable[[int], Any],
+        max_bytes: int = 3 * 2**30,
+        size_fn: Callable[[Any], int] | None = None,
+    ) -> None:
         self.loader, self.max_bytes = loader, max_bytes
-        self._store: OrderedDict[int, tuple[RunData, int]] = OrderedDict()
+        self.size_fn = size_fn or self._size
+        self._store: OrderedDict[int, tuple[Any, int]] = OrderedDict()
         self._bytes = 0
 
     @staticmethod
     def _size(run: RunData) -> int:
         return int(run.g_mean.nbytes + run.g_max.nbytes + run.g_cats.nbytes + 10 * run.g_win.nbytes)
 
-    def get(self, run_id: int) -> RunData:
+    def get(self, run_id: int) -> Any:
         if run_id in self._store:
             self._store.move_to_end(run_id)
             return self._store[run_id][0]
         run = self.loader(run_id)
-        size = self._size(run)
+        size = self.size_fn(run)
         self._store[run_id] = (run, size)
         self._bytes += size
         while self._bytes > self.max_bytes and len(self._store) > 1:

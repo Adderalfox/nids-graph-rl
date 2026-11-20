@@ -109,3 +109,13 @@
 > (semi-MDP discount gamma**dt). Main feature policy drops host_fingerprint; run all-features and gamma=0 as controls.
 > Current phase: 2b-2, awaiting the first smoke runs (train_dqn.py / run_pair_baseline.py).
 > Resume from Phase ___.
+
+
+## Update (2b-8 / 3a)
+- DQN smoke on ToN (4 epochs, eval-stride 10): in-dataset AUC 0.987 but val/test FPR 20-35%: the
+  class-balanced reward (fp_cost 1) selects a balanced-error operating point. New knob `--fp-cost`
+  (also scales collateral); choose it on source validation only. Transfer AUC ~ the pair-level HGB.
+- Feature policy: ablations point at pkt_size/tcp_flags as the UNSW-inversion drivers; the nested
+  source-only selection (`scripts/select_features.py`) is optional background, not a blocker.
+- Phase 3a delivered: graph snapshots, EdgeGAT, supervised experiment G (`scripts/train_gat.py`).
+- Next: experiment B = EdgeGAT as the D3QN Q-network (window-snapshot replay).

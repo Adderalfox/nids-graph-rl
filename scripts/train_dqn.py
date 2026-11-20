@@ -50,6 +50,7 @@ def main() -> int:
     ap.add_argument("--tau", type=float, default=0.005)
     ap.add_argument("--inspect-windows", type=int, default=1)
     ap.add_argument("--block-windows", type=int, default=6)
+    ap.add_argument("--fp-cost", type=float, default=1.0, help="benign-alert penalty multiplier")
     ap.add_argument("--val-stride", type=int, default=1, help="use every k-th val run")
     ap.add_argument("--eval-stride", type=int, default=1, help="1 for reported numbers")
     ap.add_argument("--targets", nargs="*", default=None)
@@ -67,7 +68,7 @@ def main() -> int:
             cfg.paths.data_processed, args.source, seed, variant=args.variant,
             drop_groups=tuple(args.drop_groups), keep_groups=tuple(args.keep_groups),
             train_cfg=tc, lr=args.lr, tau=args.tau, inspect_windows=args.inspect_windows,
-            block_windows=args.block_windows, val_stride=args.val_stride,
+            block_windows=args.block_windows, fp_cost=args.fp_cost, val_stride=args.val_stride,
             eval_stride=args.eval_stride, targets=args.targets, tag=args.tag,
             device=cfg.project.device,
             ckpt_path=None,

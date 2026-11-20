@@ -21,7 +21,7 @@ def test_weighted_threshold_matches_weighted_fpr():
 def test_pair_baseline_runs_end_to_end_and_feeds_report(world, tmp_path):
     root, plans, pairs = world
     out = run_pair_baseline(
-        root, "a", 0, min_group_flows=50, benign_rate=0.5, log=lambda *_: None
+        root, "a", 0, min_group_flows=50, benign_rate=0.5, max_iter=15, log=lambda *_: None
     )
     assert set(out) == {"inspect", "block"}
     for name, res in out.items():
@@ -47,7 +47,7 @@ def test_pair_baseline_runs_end_to_end_and_feeds_report(world, tmp_path):
 
 def test_threshold_floor_prevents_alert_everything_on_separable_source(world):
     root, _, _ = world
-    out = run_pair_baseline(root, "a", 0, min_group_flows=50, log=lambda *_: None)
+    out = run_pair_baseline(root, "a", 0, min_group_flows=50, max_iter=15, log=lambda *_: None)
     m = out["block"]["meta"]
     q = m["threshold_fpr_quantile"]
     assert m["threshold"] == (q if q >= m["saturated_below"] else m["fallback_threshold"])
