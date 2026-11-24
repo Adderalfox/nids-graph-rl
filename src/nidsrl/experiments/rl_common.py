@@ -75,3 +75,14 @@ def ablation_tag(drop_groups, keep_groups, tag: str = "") -> str:
     if tag:
         parts.append(tag)
     return "_".join(parts)
+
+
+def format_pair(p: dict[str, Any]) -> str:
+    b, r, rs = p["binary"], p["ranking"], p["response"]
+    head = f"  {p['source']}->{p['target']:<4}"
+    vals = (b["macro_f1"], b["tpr"], b["fpr"], r["roc_auc"])
+    if None in vals:
+        return head + " (see results.json)"
+    line = f"{head} macroF1={vals[0]:.3f} TPR={vals[1]:.3f} FPR={vals[2]:.4f} AUC={vals[3]:.3f}"
+    pv, cl = rs["prevented_attack_share"], rs["collateral_benign_share"]
+    return line + (f" prevented={pv:.3f} collateral={cl:.3f}" if None not in (pv, cl) else "")

@@ -15,10 +15,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from nidsrl.experiments.calibration import q_threshold_flat
 from nidsrl.experiments.rl_common import SourceData, ablation_tag, source_env_cfg, source_pairs
 from nidsrl.rl.env import HostPairEnv
 from nidsrl.rl.obs import obs_keep_indices
-from nidsrl.rl.policy import QPolicy
+from nidsrl.rl.policy import QPolicy, QThresholdPolicy
 from nidsrl.rl.rollout import evaluate_loaded_runs, evaluate_pair_rl
 from nidsrl.rl.trainer import TrainConfig, train_dqn
 from nidsrl.utils.device import resolve_device
@@ -46,6 +47,7 @@ def run_dqn(
     inspect_windows: int = 1,
     block_windows: int = 6,
     fp_cost: float = 1.0,
+    fpr_target: float = 0.01,
     val_stride: int = 1,
     eval_stride: int = 1,
     targets: list[str] | None = None,
@@ -54,7 +56,7 @@ def run_dqn(
     device: str = "auto",
     ckpt_path: str | Path | None = None,
     log: Callable[[str], None] = print,
-) -> dict[str, Any]:
+) -> dict[str, dict[str, Any]]:
     from nidsrl.rl.dqn import TorchLearner  # needs torch; imported lazily
 
     root = Path(root)
@@ -98,34 +100,44 @@ def run_dqn(
     else:
         log("  WARNING: no validation improvement recorded; using the last weights")
 
-    policy = QPolicy(learner.q_values, keep, eps=0.0)
-    results = []
-    for pair in pairs:
-        log(f"  evaluating {source} -> {pair['target']} ({pair['eval_set']})")
-        results.append(
-            evaluate_pair_rl(
-                policy, root, pair, env_cfg=env_cfg, min_group_flows=min_group_flows,
-                run_stride=eval_stride,
-            )  # fmt: skip
-        )
-    return {
-        "meta": {
-            "kind": "rl_env",
-            "model": f"{variant}-mlp",
-            "variant": ablation_tag(drop_groups, keep_groups, tag),
-            "source": source,
-            "seed": seed,
-            "best_epoch": best.get("epoch"),
-            "n_obs_features": len(keep),
-            "hidden": list(hidden),
-            "lr": lr,
-            "tau": tau,
-            "train": tc.to_dict(),
-            "env": {"inspect_windows": inspect_windows, "block_windows": block_windows,
-                    "fp_cost": fp_cost},
-            "reward": vars(env_cfg.reward) | {"action_cost": list(env_cfg.reward.action_cost)},
-            "eval_stride": eval_stride,
-        },
-        "history": history,
-        "pairs": results,
+    thr = q_threshold_flat(learner.q_values, data.runs("val"), keep, env_cfg, fpr_target, seed)
+    log(f"  calibrated threshold on attack_score(Q) = {thr:.4f} (source-val FPR {fpr_target})")
+    policies = {
+        "argmax": (QPolicy(learner.q_values, keep, eps=0.0), f"{variant}-mlp"),
+        "cal": (QThresholdPolicy(learner.q_values, thr, keep), f"{variant}-mlp-cal"),
     }
+    out = {}
+    for key, (policy, model) in policies.items():
+        results = []
+        for pair in pairs:
+            log(f"  [{key}] evaluating {source} -> {pair['target']} ({pair['eval_set']})")
+            results.append(
+                evaluate_pair_rl(
+                    policy, root, pair, env_cfg=env_cfg, min_group_flows=min_group_flows,
+                    run_stride=eval_stride,
+                )  # fmt: skip
+            )
+        out[key] = {
+            "meta": {
+                "kind": "rl_env",
+                "model": model,
+                "variant": ablation_tag(drop_groups, keep_groups, tag),
+                "source": source,
+                "seed": seed,
+                "best_epoch": best.get("epoch"),
+                "threshold": thr if key == "cal" else None,
+                "fpr_target": fpr_target,
+                "n_obs_features": len(keep),
+                "hidden": list(hidden),
+                "lr": lr,
+                "tau": tau,
+                "train": tc.to_dict(),
+                "env": {"inspect_windows": inspect_windows, "block_windows": block_windows,
+                        "fp_cost": fp_cost},
+                "reward": vars(env_cfg.reward) | {"action_cost": list(env_cfg.reward.action_cost)},
+                "eval_stride": eval_stride,
+            },
+            "history": history,
+            "pairs": results,
+        }
+    return out

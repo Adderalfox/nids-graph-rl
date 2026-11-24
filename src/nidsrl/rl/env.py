@@ -104,6 +104,7 @@ class HostPairEnv:
         self.pend_act = np.zeros(P, dtype=np.int8)
         self.pend_rew = np.zeros(P, dtype=np.float32)
         self.pend_t = np.zeros(P, dtype=np.int64)
+        self.pend_pos = np.zeros(P, dtype=np.int64)  # index in that window's active list
         self.g_alert = np.zeros(G, dtype=bool)
         self.g_held = np.zeros(G, dtype=bool)
         self.g_score = np.full(G, np.nan, dtype=np.float32)
@@ -175,6 +176,12 @@ class HostPairEnv:
                     # windows between the decision and the pair's next decision (>= 1):
                     # semi-MDP discounting uses gamma ** dt
                     "dt": (self.t - self.pend_t[pp]).astype(np.int64),
+                    # where s and s2 live (window index, row in that window's active list):
+                    # lets graph agents rebuild the neighbourhood around each state
+                    "t0": self.pend_t[pp].copy(),
+                    "i0": self.pend_pos[pp].copy(),
+                    "t1": np.full(len(pp), self.t, dtype=np.int64),
+                    "i1": np.flatnonzero(done_mask).astype(np.int64),
                 }
                 self.pend_has[pp] = False
         return {
@@ -261,6 +268,7 @@ class HostPairEnv:
         self.pend_act[p] = a
         self.pend_rew[p] = reward
         self.pend_t[p] = self.t
+        self.pend_pos[p] = np.arange(len(p))
         self.pend_has[p] = True
         self.last_logn[p] = np.log1p(r.g_n[gids]).astype(np.float32)
         self.n_active[p] += 1
@@ -282,6 +290,10 @@ class HostPairEnv:
             "s2": np.zeros((len(left), OBS_DIM), dtype=np.float32),
             "done": np.ones(len(left), dtype=bool),
             "dt": np.ones(len(left), dtype=np.int64),
+            "t0": self.pend_t[left].copy(),
+            "i0": self.pend_pos[left].copy(),
+            "t1": self.pend_t[left].copy(),
+            "i1": np.zeros(len(left), dtype=np.int64),
         }
         self.pend_has[left] = False
         score = np.where(np.isnan(self.g_score), -np.inf, self.g_score).astype(np.float32)

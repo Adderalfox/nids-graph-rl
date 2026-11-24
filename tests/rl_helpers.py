@@ -67,3 +67,32 @@ class LinearScorer:
 
     def load(self, st):
         self.w, self.b = st[0].copy(), st[1]
+
+
+class LinearGraphLearner:
+    """Numpy linear Q on edge features implementing the graph-learner protocol (tests only)."""
+
+    def __init__(self, d, lr=0.05, tau=0.05):
+        self.W, self.b = np.zeros((d, 3)), np.zeros(3)
+        self.Wt, self.bt = self.W.copy(), self.b.copy()
+        self.lr, self.tau, self.fits = lr, tau, 0
+
+    def q_snapshot(self, snap):
+        return snap.x @ self.W + self.b
+
+    def next_q(self, g):
+        return g.x @ self.W + self.b, g.x @ self.Wt + self.bt
+
+    def fit(self, g, rows, a, y, w=None):
+        s = g.x[rows]
+        err = (s @ self.W + self.b)[np.arange(len(a)), a] - y
+        gr = np.clip(err, -1, 1)
+        for k in range(3):
+            m = a == k
+            if m.any():
+                self.W[:, k] -= self.lr * (s[m] * gr[m, None]).sum(0) / len(a)
+                self.b[k] -= self.lr * gr[m].sum() / len(a)
+        self.Wt = (1 - self.tau) * self.Wt + self.tau * self.W
+        self.bt = (1 - self.tau) * self.bt + self.tau * self.b
+        self.fits += 1
+        return {"loss": float((gr**2).mean()), "td_error": np.abs(err)}
